@@ -1,0 +1,10 @@
+dir: internal/fake
+mockname: "{{.InterfaceName}}"
+filename: "{{.InterfaceName}}.go"
+outpkg: "fake"
+with-expecter: true
+packages:
+  github.com/nlowe/pianoman/lastfm:
+    interfaces:
+      Scrobbler:
+      FeedbackProvider:
