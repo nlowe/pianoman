@@ -7,8 +7,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/oklog/ulid"
 )
+
+var log = logrus.WithField("prefix", "wal")
 
 var ulidEntropySource = ulid.Monotonic(
 	// We don't have to be cryptographically secure, and each scrobble should yield at most
@@ -35,6 +39,7 @@ type WAL[T any] struct {
 // in order based on the timestamp the segment was created, which is embedded in the ID
 // of the segment.
 func Open[T any](path string, maxSegmentSize int) (WAL[T], error) {
+	log.Tracef("Opening wall at '%s' with max segment size %d", path, maxSegmentSize)
 	w := WAL[T]{root: path, maxSegmentSize: maxSegmentSize}
 
 	// Ensure the WAL directory exists
@@ -62,6 +67,8 @@ func Open[T any](path string, maxSegmentSize int) (WAL[T], error) {
 		}
 
 		// Open and load the segment
+		log := log.WithField("segment", file.Name())
+		log.Trace("Opening Segment")
 		f, err := os.OpenFile(filepath.Join(w.root, file.Name()), os.O_RDONLY|os.O_SYNC, 0600)
 		if err != nil {
 			return w, fmt.Errorf("open WAL: failed to open segment %s: %w", id.String(), err)
@@ -72,6 +79,7 @@ func Open[T any](path string, maxSegmentSize int) (WAL[T], error) {
 			return w, fmt.Errorf("open WAL: failed to load segment %s: %w", id.String(), err)
 		}
 
+		log.Tracef("Segment has %d entries", segment.Length())
 		w.segments = append(w.segments, &segment)
 	}
 
@@ -83,9 +91,11 @@ func Open[T any](path string, maxSegmentSize int) (WAL[T], error) {
 // to disk.
 func (w *WAL[T]) Append(v T) error {
 	// Create a segment if we don't have any or the current tail segment is out of space
-	if len(w.segments) == 0 || w.segments[len(w.segments)-1].length() >= w.maxSegmentSize {
+	if len(w.segments) == 0 || w.segments[len(w.segments)-1].Length() >= w.maxSegmentSize {
+		id := ulid.MustNew(ulid.Now(), ulidEntropySource)
+		log.Tracef("Creating new segment %s", id.String())
 		w.segments = append(w.segments, &Segment[T]{
-			id: ulid.MustNew(ulid.Now(), ulidEntropySource),
+			id: id,
 		})
 	}
 
@@ -110,12 +120,17 @@ func (w *WAL[T]) Append(v T) error {
 // from the WAL. If the function returns an error, processing stops and the segment is
 // retained.
 func (w *WAL[T]) Process(visit func(segment Segment[T]) error) error {
+	log.Debug("Processing WAL")
 	for len(w.segments) > 0 {
 		head := w.segments[0]
+		log := log.WithField("segment", head.id.String())
+		log.Trace("Processing segment")
 
 		if err := visit(*head); err != nil {
 			return fmt.Errorf("process WAL segment %s: %w", head.id.String(), err)
 		}
+
+		log.Trace("Successfully Processed segment, attempting  to trim")
 
 		// Remove the segment from the filesystem
 		if err := os.Remove(filepath.Join(w.root, head.id.String())); err != nil {

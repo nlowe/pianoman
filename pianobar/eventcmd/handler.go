@@ -9,10 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/nlowe/pianoman/lastfm"
 	"github.com/nlowe/pianoman/pianobar"
 	"github.com/nlowe/pianoman/wal"
 )
+
+var log = logrus.WithField("prefix", "handler")
 
 type EventFlags uint8
 
@@ -56,7 +60,9 @@ func Handle(
 	s lastfm.Scrobbler,
 	f lastfm.FeedbackProvider,
 ) (io.Reader, error) {
+	log.Debugf("Received event: %s", event)
 	if !handle.ShouldHandle(event) {
+		log.Trace("Ignoring event due to flags")
 		return stdin, nil
 	}
 
@@ -67,6 +73,8 @@ func Handle(
 	}
 
 	payload := string(raw)
+	log.Tracef("Received event payload: \n%s\n", payload)
+
 	next := strings.NewReader(payload)
 
 	// All of the events we could handle use a track as the payload
@@ -75,15 +83,25 @@ func Handle(
 		return next, fmt.Errorf("failed to parse track from eventcmd payload: %w", err)
 	}
 
+	log = log.WithFields(logrus.Fields{
+		"artist": track.Artist,
+		"album":  track.Album,
+		"title":  track.Title,
+	})
+
 	// Dispatch the event
 	switch event {
 	case EventSongStart:
+		log.Info("Updating Now Playing")
 		err = s.UpdateNowPlaying(ctx, track)
 	case EventSongFinish:
+		log.Info("Scrobbling Track")
 		err = handleFinish(ctx, track, w, s)
 	case EventSongLove:
+		log.Info("Sending feedback to Last.FM")
 		err = f.LoveTrack(ctx, track)
 	case EventSongBan:
+		log.Info("Sending feedback to Last.FM")
 		// Last.FM doesn't have a ban/block, the best we can do is un-love
 		err = f.UnLoveTrack(ctx, track)
 	default:

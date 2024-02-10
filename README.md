@@ -4,17 +4,89 @@
 
 A [Last.FM](https://www.last.fm/) Scrobbler for [pianobar](https://github.com/PromyLOPh/pianobar)
 
-Very Early WIP. Still TODO:
+```
+|>  Station "Rock / Metal" (445386914731145560)
+(i) Receiving new playlist... Ok.
+...
+|>  "Best Part" by "The Score" on "Carry On" <3
+[2024-02-10T15:51:09-05:00] TRACE wal: Opening wall at '/home/nlowe/.config/pianoman/wal' with max segment size 50
+[2024-02-10T15:51:09-05:00] DEBUG lastfm: Logging into Last.FM as nlowe0
+[2024-02-10T15:51:09-05:00] DEBUG lastfm: Signing auth.getMobileSession request
+[2024-02-10T15:51:10-05:00] TRACE lastfm: auth.getMobileSession finished with 200 OK
+[2024-02-10T15:51:10-05:00] TRACE lastfm: Last.FM returned ok in response to auth.getMobileSession
+[2024-02-10T15:51:10-05:00] DEBUG handler: Received event: songstart
+[2024-02-10T15:51:10-05:00] TRACE handler: Received event payload:
+artist=The Score
+title=Best Part
+album=Carry On
+coverArt=http://mediaserver-cont-dc6-1-v4v6.pandora.com/images/03/d6/7f/e1/e5904c89ae0e6e040d850c99/1080W_1080H.jpg
+stationName=Rock / Metal
+songStationName=
+pRet=1
+pRetStr=Everything is fine :)
+wRet=0
+wRetStr=No error
+songDuration=178
+songPlayed=0
+rating=1
+detailUrl=http://www.pandora.com/score/carry-on/best-part/TRg72nw3p349Vmm?dc=1777&ad=0:27:1:44039::0:0:0:0:510:019:OH:39093:0:0:0:0:0:0
+stationCount=2
+station0=QuickMix
+station1=Rock / Metal
 
-* Logging
-* Config
-* Wire up the Root Command
+
+[2024-02-10T15:51:10-05:00] DEBUG lastfm: Updating now-playing: {Artist:The Score Title:Best Part Album:Carry On ThumbsUp:true SongDuration:2m58s SongPlayed:0s ScrobbleAt:2024-02-10 20:51:10.258500291 +0000 UTC}
+[2024-02-10T15:51:10-05:00] DEBUG lastfm: Signing track.updateNowPlaying request
+[2024-02-10T15:51:11-05:00] TRACE lastfm: track.updateNowPlaying finished with 200 OK
+[2024-02-10T15:51:11-05:00] TRACE lastfm: Last.FM returned ok in response to track.updateNowPlaying
+...
+[2024-02-10T15:54:10-05:00] TRACE wal: Opening wall at '/home/nlowe/.config/pianoman/wal' with max segment size 50
+[2024-02-10T15:54:10-05:00] DEBUG lastfm: Logging into Last.FM as nlowe0
+[2024-02-10T15:54:10-05:00] DEBUG lastfm: Signing auth.getMobileSession request
+[2024-02-10T15:54:10-05:00] TRACE lastfm: auth.getMobileSession finished with 200 OK
+[2024-02-10T15:54:10-05:00] TRACE lastfm: Last.FM returned ok in response to auth.getMobileSession
+[2024-02-10T15:54:10-05:00] DEBUG handler: Received event: songfinish
+[2024-02-10T15:54:10-05:00] TRACE handler: Received event payload:
+artist=The Score
+title=Best Part
+album=Carry On
+coverArt=http://mediaserver-cont-dc6-1-v4v6.pandora.com/images/03/d6/7f/e1/e5904c89ae0e6e040d850c99/1080W_1080H.jpg
+stationName=Rock / Metal
+songStationName=
+pRet=1
+pRetStr=Everything is fine :)
+wRet=0
+wRetStr=No error
+songDuration=177
+songPlayed=177
+rating=1
+detailUrl=http://www.pandora.com/score/carry-on/best-part/TRg72nw3p349Vmm?dc=1777&ad=0:27:1:44039::0:0:0:0:510:019:OH:39093:0:0:0:0:0:0
+stationCount=2
+station0=QuickMix
+station1=Rock / Metal
+
+
+[2024-02-10T15:54:10-05:00] TRACE wal: Creating new segment 01HPACS430DZAP6RAGETJM1Z4K
+[2024-02-10T15:54:10-05:00]  INFO wal: Appending record: {Artist:The Score Title:Best Part Album:Carry On ThumbsUp:true SongDuration:2m57s SongPlayed:2m57s ScrobbleAt:2024-02-10 20:54:10.783966194 +0000 UTC} segment=01HPACS430DZAP6RAGETJM1Z4K
+[2024-02-10T15:54:10-05:00] TRACE wal: Serializing Segment of size 1 segment=01HPACS430DZAP6RAGETJM1Z4K
+[2024-02-10T15:54:10-05:00] DEBUG wal: Processing WAL
+[2024-02-10T15:54:10-05:00] TRACE wal: Processing segment segment=01HPACS430DZAP6RAGETJM1Z4K
+[2024-02-10T15:54:10-05:00] DEBUG lastfm: Scrobbling 1 track(s)
+[2024-02-10T15:54:10-05:00] DEBUG lastfm: Signing track.scrobble request
+[2024-02-10T15:54:10-05:00] TRACE lastfm: track.scrobble finished with 200 OK
+[2024-02-10T15:54:10-05:00] TRACE lastfm: Last.FM returned ok in response to track.scrobble
+[2024-02-10T15:54:10-05:00] TRACE lastfm: Last.FM accepted %d track(s) and ignored %d track(s)1 0
+[2024-02-10T15:54:10-05:00] TRACE wal: Successfully Processed segment, attempting  to trim segment=01HPACS430DZAP6RAGETJM1Z4K
+...
+```
 
 ## Requirements
 
 Follow [the Last.FM Documentation](https://www.last.fm/api/authentication) to get an API Key and secret.
 
 Update `~/.config/pianoman/config.yaml` with the API Key and your `Last.FM` credentials.
+
+Then, set `event_command` to point at `pianoman` and start listening!
 
 ## Configuration
 
@@ -27,7 +99,7 @@ auth:
   # See https://www.last.fm/api/authentication
   api:
     key: '***'
-    secret: '**'
+    secret: '***'
   # Your Last.FM Credentials
   user:
     name: someone@gmail.com

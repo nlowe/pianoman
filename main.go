@@ -16,6 +16,7 @@ func main() {
 		FullTimestamp:   true,
 		ForceFormatting: true,
 	})
+	logrus.SetOutput(os.Stderr)
 
 	if cmd.NewRootCmd().Execute() != nil {
 		os.Exit(1)

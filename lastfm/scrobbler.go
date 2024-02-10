@@ -7,12 +7,20 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/hashicorp/go-cleanhttp"
+	"github.com/sirupsen/logrus"
+
 	"github.com/nlowe/pianoman/pianobar"
 )
+
+var log = logrus.WithField("prefix", "lastfm")
 
 const (
 	apiRoot = "https://ws.audioscrobbler.com/2.0"
 
+	// https://www.last.fm/api/mobileauth
+	// https://www.last.fm/api/show/auth.getMobileSession
+	methodGetMobileSession = "auth.getMobileSession"
 	// https://www.last.fm/api/show/track.scrobble
 	methodScrobble = "track.scrobble"
 	// https://www.last.fm/api/show/track.updateNowPlaying
@@ -68,10 +76,35 @@ type API struct {
 var _ Scrobbler = (*API)(nil)
 var _ FeedbackProvider = (*API)(nil)
 
+func New(ctx context.Context, key, secret, username, password string) (*API, error) {
+	result := &API{
+		api: cleanhttp.DefaultClient(),
+
+		apiKey:    key,
+		apiSecret: secret,
+	}
+
+	// TODO: Login
+	log.Debugf("Logging into Last.FM as %s", username)
+	params := newRequest(methodGetMobileSession)
+	params.set(paramApiKey, key)
+	params.set("username", username)
+	params.set("password", password)
+
+	resp, err := sendAndCheck[Session](ctx, result, params)
+	if err != nil {
+		return nil, fmt.Errorf("login failed: %w", err)
+	}
+
+	result.sessionKey = resp.Value.Key
+	return result, nil
+}
+
 func sendAndCheck[TResult any](ctx context.Context, a *API, params Request) (Response[TResult], error) {
 	var result Response[TResult]
 
 	// Sign the request
+	log.Debugf("Signing %s request", params.method())
 	params.sign(a.apiKey, a.apiSecret, a.sessionKey)
 
 	// Send the request
@@ -88,11 +121,13 @@ func sendAndCheck[TResult any](ctx context.Context, a *API, params Request) (Res
 	}
 
 	// Decode Response
+	log.Tracef("%s finished with %s", params.method(), resp.Status)
 	if err = xml.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return result, fmt.Errorf("sendAndCheck: request failed: failed to parse response: %s: %w", resp.Status, err)
 	}
 
 	// Check Response
+	log.Tracef("Last.FM returned %s in response to %s", result.Status, params.method())
 	if result.Status == statusFailed {
 		return result, fmt.Errorf("sendAndCheck: request failed: %s: %w", resp.Status, result.Error)
 	}
@@ -114,6 +149,8 @@ func (a *API) Scrobble(ctx context.Context, tracks ...pianobar.Track) error {
 		return fmt.Errorf("scrobble: up to %d tracks may be included in one scrobble request: got %d", MaxTracksPerScrobble, len(tracks))
 	}
 
+	log.Debugf("Scrobbling %d track(s)", len(tracks))
+
 	// Populate Tracks
 	params := newRequest(methodScrobble)
 	for i, t := range tracks {
@@ -125,14 +162,16 @@ func (a *API) Scrobble(ctx context.Context, tracks ...pianobar.Track) error {
 		params.set(fmt.Sprintf("duration[%d]", i), strconv.Itoa(int(t.SongDuration.Seconds())))
 	}
 
-	_, err := sendAndCheck[ScrobbleResult](ctx, a, params)
+	resp, err := sendAndCheck[ScrobbleResult](ctx, a, params)
+	log.Tracef("Last.FM accepted %d track(s) and ignored %d track(s)", resp.Value.Accepted, resp.Value.Ignored)
 
-	// TODO: Log response?
 	return err
 }
 
 // UpdateNowPlaying calls https://www.last.fm/api/show/track.updateNowPlaying
 func (a *API) UpdateNowPlaying(ctx context.Context, t pianobar.Track) error {
+	log.Debugf("Updating now-playing: %+v", t)
+
 	// Populate Track Data
 	params := newRequest(methodUpdateNowPlaying)
 
@@ -142,25 +181,25 @@ func (a *API) UpdateNowPlaying(ctx context.Context, t pianobar.Track) error {
 	params.set("duration", strconv.Itoa(int(t.SongDuration.Seconds())))
 
 	_, err := sendAndCheck[Track](ctx, a, params)
-
-	// TODO: Log response?
 	return err
 }
 
 // LoveTrack calls https://www.last.fm/api/show/track.love
 func (a *API) LoveTrack(ctx context.Context, t pianobar.Track) error {
+	log.Debugf("Loving Track: %+v", t)
 	params := newRequest(methodLoveTrack)
 
 	params.set("artist", t.Artist)
 	params.set("track", t.Title)
 
 	_, err := sendAndCheck[struct{}](ctx, a, params)
-
 	return err
 }
 
 // UnLoveTrack calls https://www.last.fm/api/show/track.unlove
 func (a *API) UnLoveTrack(ctx context.Context, t pianobar.Track) error {
+	log.Debugf("Un-Loving Track: %+v", t)
+
 	params := newRequest(methodUnLoveTrack)
 
 	params.set("artist", t.Artist)

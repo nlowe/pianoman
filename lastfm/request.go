@@ -20,6 +20,10 @@ func newRequest(method string) Request {
 	return map[string][]string{paramMethod: {method}}
 }
 
+func (r Request) method() string {
+	return r[paramMethod][0]
+}
+
 func (r Request) set(k, v string) {
 	r[k] = []string{v}
 }

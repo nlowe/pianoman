@@ -46,11 +46,11 @@ func TestSegment(t *testing.T) {
 	t.Run("append", func(t *testing.T) {
 		sut := Segment[int]{records: []int{1, 2, 3}}
 
-		assert.Equal(t, 3, sut.length())
+		assert.Equal(t, 3, sut.Length())
 
 		sut.append(4)
 
-		assert.Equal(t, 4, sut.length())
+		assert.Equal(t, 4, sut.Length())
 
 		records := sut.Records()
 		assert.Equal(t, 4, records[3])

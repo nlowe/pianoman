@@ -44,3 +44,9 @@ type Track struct {
 
 	IgnoreReason String `xml:"ignoreMessage,omitempty"`
 }
+
+type Session struct {
+	Name       string `xml:"name"`
+	Key        string `xml:"key"`
+	Subscriber int    `xml:"subscriber"`
+}

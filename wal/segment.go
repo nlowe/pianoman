@@ -29,14 +29,16 @@ func loadSegment[T any](id ulid.ULID, r io.Reader) (Segment[T], error) {
 }
 
 func (s *Segment[T]) serialize(w io.Writer) error {
+	log.WithField("segment", s.id.String()).Tracef("Serializing Segment of size %d", s.Length())
 	return json.NewEncoder(w).Encode(s.records)
 }
 
 func (s *Segment[T]) append(v T) {
+	log.WithField("segment", s.id.String()).Tracef("Appending record: %+v", v)
 	s.records = append(s.records, v)
 }
 
-func (s *Segment[T]) length() int {
+func (s *Segment[T]) Length() int {
 	return len(s.records)
 }
 
