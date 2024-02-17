@@ -90,22 +90,29 @@ func Handle(
 	})
 
 	// Dispatch the event
+	var love bool
 	switch event {
 	case EventSongStart:
 		log.Info("Updating Now Playing")
 		err = s.UpdateNowPlaying(ctx, track)
+		love = track.ThumbsUp
 	case EventSongFinish:
 		log.Info("Scrobbling Track")
 		err = handleFinish(ctx, track, w, s)
+		love = track.ThumbsUp
 	case EventSongLove:
-		log.Info("Sending feedback to Last.FM")
-		err = f.LoveTrack(ctx, track)
+		love = true
 	case EventSongBan:
 		log.Info("Sending feedback to Last.FM")
 		// Last.FM doesn't have a ban/block, the best we can do is un-love
 		err = f.UnLoveTrack(ctx, track)
 	default:
 		err = fmt.Errorf("unknown event: %s", event)
+	}
+
+	if love {
+		log.Info("Sending feedback to Last.FM")
+		err = errors.Join(err, f.LoveTrack(ctx, track))
 	}
 
 	// And return the saved reader and any error from event handling

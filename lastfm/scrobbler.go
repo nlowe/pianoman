@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/sirupsen/logrus"
@@ -67,37 +68,30 @@ type FeedbackProvider interface {
 type API struct {
 	api *http.Client
 
+	getSessionKey *sync.Once
+
 	sessionKey string
 	apiKey     string
 	apiSecret  string
+	username   string
+	password   string
 }
 
 // Ensure API implements Scrobbler and FeedbackProvider
 var _ Scrobbler = (*API)(nil)
 var _ FeedbackProvider = (*API)(nil)
 
-func New(ctx context.Context, key, secret, username, password string) (*API, error) {
-	result := &API{
+func New(key, secret, username, password string) *API {
+	return &API{
 		api: cleanhttp.DefaultClient(),
+
+		getSessionKey: &sync.Once{},
 
 		apiKey:    key,
 		apiSecret: secret,
+		username:  username,
+		password:  password,
 	}
-
-	// TODO: Login
-	log.Debugf("Logging into Last.FM as %s", username)
-	params := newRequest(methodGetMobileSession)
-	params.set(paramApiKey, key)
-	params.set("username", username)
-	params.set("password", password)
-
-	resp, err := sendAndCheck[Session](ctx, result, params)
-	if err != nil {
-		return nil, fmt.Errorf("login failed: %w", err)
-	}
-
-	result.sessionKey = resp.Value.Key
-	return result, nil
 }
 
 func sendAndCheck[TResult any](ctx context.Context, a *API, params Request) (Response[TResult], error) {
@@ -139,6 +133,25 @@ func sendAndCheck[TResult any](ctx context.Context, a *API, params Request) (Res
 	return result, nil
 }
 
+func (a *API) ensureSessionKey(ctx context.Context) {
+	a.getSessionKey.Do(func() {
+		// TODO: Cache session key?
+
+		log.Debugf("Logging into Last.FM as %s", a.username)
+		params := newRequest(methodGetMobileSession)
+		params.set(paramApiKey, a.apiKey)
+		params.set("username", a.username)
+		params.set("password", a.password)
+
+		resp, err := sendAndCheck[Session](ctx, a, params)
+		if err != nil {
+			log.WithError(err).Fatal("Failed to login to Last.FM")
+		}
+
+		a.sessionKey = resp.Value.Key
+	})
+}
+
 // Scrobble sends the provided track and all other pending scrobbles to https://www.last.fm/api/show/track.scrobble
 func (a *API) Scrobble(ctx context.Context, tracks ...pianobar.Track) error {
 	if len(tracks) == 0 {
@@ -148,6 +161,8 @@ func (a *API) Scrobble(ctx context.Context, tracks ...pianobar.Track) error {
 	if len(tracks) > MaxTracksPerScrobble {
 		return fmt.Errorf("scrobble: up to %d tracks may be included in one scrobble request: got %d", MaxTracksPerScrobble, len(tracks))
 	}
+
+	a.ensureSessionKey(ctx)
 
 	log.Debugf("Scrobbling %d track(s)", len(tracks))
 
@@ -170,6 +185,8 @@ func (a *API) Scrobble(ctx context.Context, tracks ...pianobar.Track) error {
 
 // UpdateNowPlaying calls https://www.last.fm/api/show/track.updateNowPlaying
 func (a *API) UpdateNowPlaying(ctx context.Context, t pianobar.Track) error {
+	a.ensureSessionKey(ctx)
+
 	log.Debugf("Updating now-playing: %+v", t)
 
 	// Populate Track Data
@@ -186,6 +203,8 @@ func (a *API) UpdateNowPlaying(ctx context.Context, t pianobar.Track) error {
 
 // LoveTrack calls https://www.last.fm/api/show/track.love
 func (a *API) LoveTrack(ctx context.Context, t pianobar.Track) error {
+	a.ensureSessionKey(ctx)
+
 	log.Debugf("Loving Track: %+v", t)
 	params := newRequest(methodLoveTrack)
 
@@ -198,6 +217,8 @@ func (a *API) LoveTrack(ctx context.Context, t pianobar.Track) error {
 
 // UnLoveTrack calls https://www.last.fm/api/show/track.unlove
 func (a *API) UnLoveTrack(ctx context.Context, t pianobar.Track) error {
+	a.ensureSessionKey(ctx)
+
 	log.Debugf("Un-Loving Track: %+v", t)
 
 	params := newRequest(methodUnLoveTrack)

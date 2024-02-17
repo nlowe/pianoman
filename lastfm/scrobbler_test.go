@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,11 +39,15 @@ func (r roundTripperFunc) RoundTrip(request *http.Request) (*http.Response, erro
 func setupAPI(t *testing.T, f func(r *http.Request) *http.Response) *API {
 	t.Helper()
 
+	once := &sync.Once{}
+	once.Do(func() {})
+
 	return &API{
-		api:        &http.Client{Transport: roundTripperFunc(f)},
-		sessionKey: testSessionKey,
-		apiKey:     testApiKey,
-		apiSecret:  testApiSecret,
+		api:           &http.Client{Transport: roundTripperFunc(f)},
+		getSessionKey: once,
+		sessionKey:    testSessionKey,
+		apiKey:        testApiKey,
+		apiSecret:     testApiSecret,
 	}
 }
 

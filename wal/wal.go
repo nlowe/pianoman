@@ -39,7 +39,7 @@ type WAL[T any] struct {
 // in order based on the timestamp the segment was created, which is embedded in the ID
 // of the segment.
 func Open[T any](path string, maxSegmentSize int) (WAL[T], error) {
-	log.Tracef("Opening wall at '%s' with max segment size %d", path, maxSegmentSize)
+	log.Debugf("Opening wal at '%s' with max segment size %d", path, maxSegmentSize)
 	w := WAL[T]{root: path, maxSegmentSize: maxSegmentSize}
 
 	// Ensure the WAL directory exists

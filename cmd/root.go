@@ -40,11 +40,14 @@ func NewRootCmd() *cobra.Command {
 				return fmt.Errorf("failed to open config: %w", err)
 			}
 
-			// TODO: Warn on insecure config mode bits
-
 			defer func() {
 				_ = f.Close()
 			}()
+
+			mode, err := f.Stat()
+			if err == nil && mode.Mode().Perm() != 0o600 {
+				logrus.Warnf("Config file has insecure permissions. Want: 600, got %o", mode.Mode().Perm())
+			}
 
 			cfg, err = config.Parse(f)
 			if err != nil {
@@ -63,23 +66,18 @@ func NewRootCmd() *cobra.Command {
 				filepath.Dir(configFilePath), filepath.Clean(cfg.Scrobble.WALDirectory),
 			), lastfm.MaxTracksPerScrobble)
 
-			return err
-		},
-		RunE: func(_ *cobra.Command, args []string) error {
-			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-			defer cancel()
-
-			var err error
-			lfm, err = lastfm.New(
-				ctx,
+			lfm = lastfm.New(
 				cfg.Auth.API.Key,
 				cfg.Auth.API.Secret,
 				cfg.Auth.User.Name,
 				cfg.Auth.User.Password,
 			)
-			if err != nil {
-				return fmt.Errorf("failed to authenticate to Last.FM: %w", err)
-			}
+
+			return err
+		},
+		RunE: func(_ *cobra.Command, args []string) error {
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+			defer cancel()
 
 			flags := eventcmd.HandleSongFinish
 			if cfg.Scrobble.NowPlaying {
@@ -94,7 +92,7 @@ func NewRootCmd() *cobra.Command {
 			// TODO: Don't scrobble thumbs down if configured
 
 			// TODO: Support eventcmd chaining
-			_, err = eventcmd.Handle(ctx, args[0], flags, os.Stdin, w, lfm, lfm)
+			_, err := eventcmd.Handle(ctx, args[0], flags, os.Stdin, w, lfm, lfm)
 			return err
 		},
 	}
