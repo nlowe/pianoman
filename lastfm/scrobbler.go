@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"sync"
 
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/sirupsen/logrus"
+
+	"github.com/nlowe/pianoman/lazy"
 
 	"github.com/nlowe/pianoman/pianobar"
 )
@@ -68,24 +69,24 @@ type FeedbackProvider interface {
 type API struct {
 	api *http.Client
 
-	getSessionKey *sync.Once
+	sessionKeyCache *lazy.Value[string]
+	sessionKey      string
 
-	sessionKey string
-	apiKey     string
-	apiSecret  string
-	username   string
-	password   string
+	apiKey    string
+	apiSecret string
+	username  string
+	password  string
 }
 
 // Ensure API implements Scrobbler and FeedbackProvider
 var _ Scrobbler = (*API)(nil)
 var _ FeedbackProvider = (*API)(nil)
 
-func New(key, secret, username, password string) *API {
+func New(cache *lazy.Value[string], key, secret, username, password string) *API {
 	return &API{
 		api: cleanhttp.DefaultClient(),
 
-		getSessionKey: &sync.Once{},
+		sessionKeyCache: cache,
 
 		apiKey:    key,
 		apiSecret: secret,
@@ -114,10 +115,20 @@ func sendAndCheck[TResult any](ctx context.Context, a *API, params Request) (Res
 		return result, fmt.Errorf("sendAndCheck: failed to make request: %w", err)
 	}
 
+	// Zero the session on common http auth failure codes
+	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+		a.sessionKeyCache.Zero()
+	}
+
 	// Decode Response
 	log.Tracef("%s finished with %s", params.method(), resp.Status)
 	if err = xml.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return result, fmt.Errorf("sendAndCheck: request failed: failed to parse response: %s: %w", resp.Status, err)
+	}
+
+	// If we get any error, expire the session so we get a fresh one next time
+	if result.Error != nil {
+		a.sessionKeyCache.Zero()
 	}
 
 	// Check Response
@@ -134,9 +145,7 @@ func sendAndCheck[TResult any](ctx context.Context, a *API, params Request) (Res
 }
 
 func (a *API) ensureSessionKey(ctx context.Context) {
-	a.getSessionKey.Do(func() {
-		// TODO: Cache session key?
-
+	a.sessionKey = a.sessionKeyCache.Fetch(func() string {
 		log.Debugf("Logging into Last.FM as %s", a.username)
 		params := newRequest(methodGetMobileSession)
 		params.set(paramApiKey, a.apiKey)
@@ -148,7 +157,7 @@ func (a *API) ensureSessionKey(ctx context.Context) {
 			log.WithError(err).Fatal("Failed to login to Last.FM")
 		}
 
-		a.sessionKey = resp.Value.Key
+		return resp.Value.Key
 	})
 }
 

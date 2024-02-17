@@ -15,6 +15,8 @@ type Config struct {
 	EventCMD EventConfig `yaml:"eventcmd"`
 
 	Verbosity string `yaml:"verbosity"`
+
+	Path string `yaml:"-"`
 }
 
 type AuthConfig struct {

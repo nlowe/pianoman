@@ -7,9 +7,10 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"testing"
 	"time"
+
+	"github.com/nlowe/pianoman/lazy"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,15 +40,19 @@ func (r roundTripperFunc) RoundTrip(request *http.Request) (*http.Response, erro
 func setupAPI(t *testing.T, f func(r *http.Request) *http.Response) *API {
 	t.Helper()
 
-	once := &sync.Once{}
-	once.Do(func() {})
+	tokenCache := lazy.New[string](func() {})
+
+	_ = tokenCache.Fetch(func() string {
+		return testSessionKey
+	})
 
 	return &API{
-		api:           &http.Client{Transport: roundTripperFunc(f)},
-		getSessionKey: once,
-		sessionKey:    testSessionKey,
-		apiKey:        testApiKey,
-		apiSecret:     testApiSecret,
+		api: &http.Client{Transport: roundTripperFunc(f)},
+
+		sessionKeyCache: tokenCache,
+
+		apiKey:    testApiKey,
+		apiSecret: testApiSecret,
 	}
 }
 
